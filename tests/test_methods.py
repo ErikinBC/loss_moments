@@ -42,17 +42,22 @@ class TestIntegrators:
         with pytest.raises(AssertionError):
             self.method_class(loss=loss_fun_works)
 
+
     def _test_only_joint_distribution(self):
         """When the joint is provided the conditional/unconditional should be None"""
         mci1 = self.method_class(loss=loss_fun_works, dist_joint=dist_BVN)
         assert mci1.dist_X_uncond is None
         assert mci1.dist_Y_condX is None
+        with pytest.raises(AssertionError):
+            self.method_class(loss=loss_fun_fails, dist_joint=dist_BVN)
         return mci1
 
     def _test_unconditional_and_conditional_distribution(self):
         """When the conditional/unconditional is provided the joint should be None"""
         mci2 = self.method_class(loss=loss_fun_works, dist_X_uncond=dist_X_uni, dist_Y_condX=dist_Ycond)
         assert mci2.dist_joint is None
+        with pytest.raises(AssertionError):
+            self.method_class(loss=loss_fun_fails, dist_X_uncond=dist_X_uni, dist_Y_condX=dist_Ycond)
         return mci2
 
     def _test_invalid_conditional_distribution(self):
