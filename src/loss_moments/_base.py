@@ -66,7 +66,7 @@ class BaseIntegrator:
         else:
             if z.shape[0] == 1:
                 # Only a single length anyways
-                return float(z)
+                return z[0]
             else:
                 return tuple(x)
 

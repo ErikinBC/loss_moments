@@ -6,20 +6,24 @@ Contains the two main classes of this package:
 
 # External modules
 import numpy as np
-from typing import Tuple, Union
 from scipy.integrate import dblquad
 from scipy.stats import multivariate_normal
+from typing import Tuple, Union, Callable, Any
+from scipy.stats._distn_infrastructure import rv_continuous_frozen
+from scipy.stats._multivariate import multivariate_normal_frozen
 # Intenral modules
 from ._base import BaseIntegrator
 
-
 class MonteCarloIntegrator(BaseIntegrator):
-    def __init__(self, *args, **kwargs):
-        """
-        Initialize the Monte Carlo Integration class. See utils.BaseIntegrator for constructor arguments.
-        """
-        super().__init__(*args, **kwargs)
-
+    def __init__(self, 
+                 loss: Callable[..., Any], 
+                 dist_joint: multivariate_normal_frozen | None = None, 
+                 dist_X_uncond: rv_continuous_frozen | None = None, 
+                 dist_Y_condX: Callable[..., Any] | None = None
+                 ):
+        """Initialize the Monte Carlo Integration class. See _base.BaseIntegrator for constructor argument details."""
+        super().__init__(loss, dist_joint, dist_X_uncond, dist_Y_condX)
+        
     def _draw_samples(self, num_samples: int, seed: int | None) -> Tuple[np.ndarray, np.ndarray]:
         """
         Internal method for generating labels and features
@@ -103,13 +107,15 @@ class MonteCarloIntegrator(BaseIntegrator):
 
 
 class NumericalIntegrator(BaseIntegrator):
-    def __init__(self, *args, **kwargs):
-        """
-        Initialize the Numerical Integration class. See utils.BaseIntegrator for constructor arguments.
-        """
-        super().__init__(*args, **kwargs)
+    def __init__(self, 
+                loss: Callable[..., Any], 
+                dist_joint: multivariate_normal_frozen | None = None, 
+                dist_X_uncond: rv_continuous_frozen | None = None, 
+                dist_Y_condX: Callable[..., Any] | None = None
+                ):
+        """Initialize the Numerical Integration class. See utils.BaseIntegrator for constructor arguments."""
+        super().__init__(loss, dist_joint, dist_X_uncond, dist_Y_condX)
         # Assign the dictionary/methods that will get called later
-        # self.integrate_method
         self.di_methods = {
                     'trapz_loop': 
                         {'method':self._trapz_integrate, 
@@ -122,9 +128,10 @@ class NumericalIntegrator(BaseIntegrator):
                          'kwargs': {}},
                      }
         self.valid_methods = list(self.di_methods)
-        # self._trapz_integrate methods
-        self.di_grid_methods = {True: self._trapz_integrate_grid, 
-                           False: self._trapz_integrate_loop}
+        self.di_grid_methods = {
+                        True: self._trapz_integrate_grid, 
+                        False: self._trapz_integrate_loop
+                        }
         
 
     def _gen_bvn_bounds(self,
