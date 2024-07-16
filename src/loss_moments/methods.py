@@ -146,10 +146,18 @@ class NumericalIntegrator(BaseIntegrator):
             y_min, y_max = yx_bounds.T[0]
             x_min, x_max = yx_bounds.T[1]
         else:
-            # Need to use the formula of a conditional distribution to extract
-            mu = np.array([self.dist_Y_condX.mu_Y, self.dist_Y_condX.mu_X])
-            off_diag = self.dist_Y_condX.rho * self.dist_Y_condX.sigma_X * self.dist_Y_condX.sigma_Y
-            cov = np.array([[self.dist_Y_condX.sigma_Y ** 2, off_diag], [off_diag, self.dist_Y_condX.sigma_X ** 2]])
+            # Need to use the formula of a conditional distribution to extract the joint
+            # We can use simple algebra to solve (mu_Y, sigma_Y) from Y | X = x ~ norm(loc=mu_Y + rho*(sigma2_Y/sigma2_X)**0.5*(x - mu_X), scale=np.sqrt(sigma2_Y * (1-rho**2)))
+            mu_X = self.dist_X_uncond.mean()
+            sigma_X = self.dist_X_uncond.std()
+            mu_Y = self.dist_Y_condX(mu_X).mean()
+            sigmaY_rho = sigma_X*(self.dist_Y_condX(1 + mu_X).mean() - mu_Y)
+            c = self.dist_Y_condX(mu_X).var() / sigmaY_rho**2
+            rho = np.sqrt(1 / (c + 1))
+            sigma_Y = sigmaY_rho / rho
+            mu = np.array([mu_Y, mu_X])
+            off_diag = rho * sigma_X * sigma_Y
+            cov = np.array([[sigma_Y ** 2, off_diag], [off_diag, sigma_X ** 2]])
             dist_joint = multivariate_normal(mean=mu, cov=cov)
             yx_bounds = np.atleast_2d(dist_joint.mean) + np.tile([-1, 1], [2, 1]).T * k_sd * np.sqrt(np.diag(dist_joint.cov))
         y_min, y_max = yx_bounds.T[0]
