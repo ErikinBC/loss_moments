@@ -1,27 +1,41 @@
-# Config file for automatic testing at travis-ci.com
+# Background on the setup
+# 1) travis login --pro --github-token {PRIVATE}
+# 2) travis encrypt "{PRIVATE}" --add deploy.password --com 
 
 language: python
+dist: jammy
 python:
   - 3.11
   - 3.10
 
-# Command to install dependencies, e.g. pip install -r requirements.txt --use-mirrors
-install: pip install -U tox-travis
+install:
+  - pip install -r requirements.txt
 
-# Command to run tests, e.g. python setup.py test
-script: tox
+script:
+  - tox
 
-# Assuming you have installed the travis-ci CLI tool, after you
-# create the Github repo and add it to Travis, run the
-# following command to finish PyPI deployment setup:
-# $ travis encrypt --add deploy.password
-deploy:
-  provider: pypi
-  distributions: sdist bdist_wheel
-  user: ErikinBC
-  password:
-    secure: PLEASE_REPLACE_ME
-  on:
-    tags: true
-    repo: ErikinBC/loss_moments
-    python: 3.11
+jobs:
+  include:
+    - stage: test
+      if: branch = main OR branch = production
+      python: 3.11
+    - stage: test
+      if: branch = main OR branch = production
+      python: 3.10
+
+    - stage: deploy
+      if: branch = production AND type = push
+      python: 3.11
+      script: skip
+      before_deploy:
+        - rm -rf src/loss_moments.egg-info
+        - git stash --all
+      deploy:
+        provider: pypi
+        distributions: sdist bdist_wheel
+        user: ErikinBC
+        password:
+          secure: pKVfJkNmcKAM9e5L6VXkYVzeW4KNKLEBdAndAZ2PaQZLisCzr3J5GDX/G+f0sh/Iejz4RIWmQJSwqRecweVHFYC0zoJM1Tm8u55O2S/hD2G5/oipiTEbep67mdp5hskcoXhZrKrOQE0obT6mNqoX93/t3E+y1aidMtARpq0QUIFACaT2JYyRE19taBIx3hSgNKzXrZjVrpOtBZaXamQby/pBxr43x7ocRA7Nu9xfVcPSqn9Oae+cXiSOpis5cBBp+f8AWQG0ltmJI8mqkE4c/CO02jRSIY91AHWzL5dpa4hK5+8x6CZcLyR4d4XJz52+lLIpwd2KvbQ/1cwOiaz0OT2WDlBFWdzB7wmahDgwJO+89GKoWQbm0D/idtpDHyB3mT5N82byD7i0lagcPQ8xh+f41+iTaVImPV0lcnMBVQ6//MSdDfgLUyvI7H+K194ZumbKBlCndKlaeJY4tBpRl46j8DGiXBLKnA62DsQ1y7NXE7UeJB2F/GJaR/IqTdpYOwmlaI31hX6rvsnuRS94aSchX5iQdbbUCXyU4NPOmJOYI3WwEIGIB2apNoezNgjntIhUMJcueE9SWmCKPlCI5+rFBzvtnxpCaRCsA8b2G73yl8vWayrj8c+jo0nfPn8bRmzKbEG1D56Kgry02FumzZu1uWQazlfoYLdrGMc/GZk=
+        on:
+          repo: ErikinBC/loss_moments
+          all_branches: true

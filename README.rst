@@ -16,13 +16,9 @@ Loss Function Moments
 
 Package to help calculate the mean and variance (first and second moments) of a loss function :math:`\ell` for a supervised ML model:
 
-.. math::
-
-   R(\theta; f) = E_{(y,x) \sim P_{h(\phi)}}[\ell(y, f_\theta(x))]
-
-.. math::
-
-   V(\theta; f) = E_{(y,x) \sim P_{h(\phi)}}[ (\ell(y, f_\theta(x)) - R(\theta))^2 ]
+:raw-math:`$$ R(\theta; f) = E_{(y,x) \sim P_{h(\phi)}}[\ell(y, f_\theta(x))] $$`
+:raw-math:`$$ V(\theta; f) = E_{(y,x) \sim P_{h(\phi)}}[ (\ell(y, f_\theta(x)) - R(\theta))^2 ] $$`
+  
 
 For more information about notation and theory, see this blog post: `SOME TITLE <http://www.erikdrysdale.com/.../>`_.
 

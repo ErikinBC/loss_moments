@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "loss_moments"
 version = "0.1.0"
-description = "Package to help calculate the mean and variance of a loss function for a ML model[D"
+description = "Package to help calculate the mean and variance of a loss function for a ML model"
 readme = "README.rst"
 authors = [
   {name = "Erik Drysdale", email = "erikinwest@gmail.com"}
