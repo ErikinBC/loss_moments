@@ -1,7 +1,7 @@
 """
 Unit tests for `loss_moments` package.
 
-python3 -m pytest tests/ -W ignore -s
+python3 -m pytest tests/test_methods.py -W ignore -s
 """
 
 # External
