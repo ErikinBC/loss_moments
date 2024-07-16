@@ -58,10 +58,17 @@ class BaseIntegrator:
 
     @staticmethod
     def _return_tuple_or_float(x):
-        if len(np.array(x).shape) == 0:
+        z = np.array(x)
+        n_len_shape = len(z.shape)
+        if n_len_shape == 0:
+            # x is already a float or an int
             return x
         else:
-            return tuple(x)
+            if z.shape[0] == 1:
+                # Only a single length anyways
+                return float(z)
+            else:
+                return tuple(x)
 
     @staticmethod
     def _check_atleast_one_dist(dist_joint = None, dist_X_uncond = None, dist_Y_condX = None):
