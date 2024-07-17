@@ -108,6 +108,7 @@ class dgp_yx():
         # (ii) Calculate unconditional distribution of f_theta
         dist_eta = norm(loc=0, scale=np.sqrt(Sigma_theta))
         # (iii) Calculate conditional distribution of y | f_theta
-        dist_ycond_eta = lambda x: norm(loc=x.dot(theta) * (Sigma_theta_beta / Sigma_theta), scale=np.sqrt(Sigma_beta + self.sigma2_u - (Sigma_theta_beta**2/Sigma_theta) ))
+        # note that the "lambda x: " really means "lambda: eta"
+        dist_ycond_eta = lambda x: norm(loc=x * (Sigma_theta_beta / Sigma_theta), scale=np.sqrt(Sigma_beta + self.sigma2_u - (Sigma_theta_beta**2/Sigma_theta) ))
         # Return
         return dist_y_eta, dist_eta, dist_ycond_eta

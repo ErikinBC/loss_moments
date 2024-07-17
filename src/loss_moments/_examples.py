@@ -43,20 +43,39 @@ def simulation(
     mdl_oracle = linear_predictor(beta_oracle)
     mdl_theta = linear_predictor(theta_hat)
     mdl_gamma = linear_predictor(gamma_hat)
-    di_mdl = {'oracle': {'coef': beta_oracle, 'mdl': mdl_oracle},
-              'theta': {'coef': theta_hat, 'mdl': mdl_theta}, 
-              'gamma': {'coef': gamma_hat, 'mdl':mdl_gamma}}
+    di_mdl = {'oracle': {'coef': beta_oracle, 
+                         'mdl': {'mci':mdl_oracle, 
+                                 'numint': None}},
+              'theta': {'coef': theta_hat, 
+                        'mdl': {'mci': mdl_theta,
+                                'numint': None}}, 
+              'gamma': {'coef': gamma_hat, 
+                        'mdl':{'mci': mdl_gamma, 
+                               'numint': None}}}
     
     # (ii) Prepare to loop over all models (and methods for the integrators)
+    di_methods =  {
+                    'mci': MonteCarloIntegrator,
+                    # 'numint': NumericalIntegrator,
+                  }
     kwargs_joint_mci = {'loss':squared_error, 'dist_joint':generator.dist_yx}
     kwargs_cond_mci = {'loss':squared_error, 'dist_X_uncond':generator.dist_x, 'dist_Y_condX':generator.dist_ycondx}
-    di_kwargs = {'joint': kwargs_joint_mci, 
-                 'cond': kwargs_cond_mci}
+    dist_y_eta, dist_eta, dist_ycond_eta = generator.gen_f_theta_dists(theta=gamma_hat)
+    # For numerical integration, x has to be uni-dimensional, which in this case means we need to know the distribution of (y, f_theta), f_theta, and y | f_theta
+    kwargs_joint_numint = {'loss':squared_error, 'dist_joint':dist_y_eta}
+    kwargs_cond_numint = {'loss':squared_error, 'dist_X_uncond':dist_eta, 'dist_Y_condX':dist_ycond_eta}
+    di_kwargs_construct = {
+                            'mci': {'joint': kwargs_joint_mci, 'cond': kwargs_cond_mci},
+                            'numint': {'joint': kwargs_joint_numint, 'cond': kwargs_cond_numint}
+                          }
     # Argumetns for integrate method
-    kwargs_method_integrate = {'num_samples':10000, 'calc_variance':True, 'seed':seed, 'n_chunks':10}
+    kwargs_integrate_mci = {'num_samples':10000, 'calc_variance':True, 'seed':seed, 'n_chunks':10}
+    kwargs_integrate_numint = {'method': 'trapz_loop', 'k_sd':4.5, 'n_Y':200, 'n_X':201, 'calc_variance': True}
+    di_kwargs_integrate = {'mci': kwargs_integrate_mci, 
+                           'numint': kwargs_integrate_numint}
+
     # Set up storage
     di_ret = {k: {'risk':[], 'lossvar':[]} for k in di_mdl.keys()}
-
     # (iii) Loop over methods
     for model, predictor in di_mdl.items():
         print(f'~~~ model={model} ~~~')
@@ -70,29 +89,28 @@ def simulation(
         # Append results
         di_ret[model]['risk'] += [theory_risk, emp_risk, ]
         di_ret[model]['lossvar'] += [theory_lossvar, emp_lossvar, ]
-        for approach, kwargs in di_kwargs.items():    
-            print(f'-- approach = {approach} --')
-            # (c) Monte carlo integration
-            approach_mdl = predictor['mdl']
-            mci_integrator = MonteCarloIntegrator(**{**kwargs, **{'f_theta':approach_mdl}})
-            mci_risk,  mci_lossvar = mci_integrator.integrate(**kwargs_method_integrate)
-            # (d) Numerical integration
-
-            # Append results
-            di_ret[model]['risk'] += [mci_risk]
-            di_ret[model]['lossvar'] += [mci_lossvar]
-
-    # # (v) For numerical integration, x has to be uni-dimensional, which in this case means we need to know the distribution of (y, f_theta), f_theta, and y | f_theta. I'll denote f_theta as eta for simplicity.
-    # dist_y_eta, dist_eta, dist_ycond_eta = generator.gen_f_theta_dists(theta=beta_oracle)
-    # kwargs_joint_numint = {'loss':squared_error, 'dist_joint':...}
-    # kwargs_cond_numint = {'loss':squared_error, 'dist_X_uncond':..., 'dist_Y_condX':...}
-    # numint_joint_oracle = NumericalIntegrator()
+        # Loop over our integration methods (e.g. MonteCarloIntegrator)
+        for method, integrator in di_methods.items():
+            print(f'Integration method: {method}')
+            # Extract the kwargs
+            kwargs_construct = di_kwargs_construct[method]
+            kwargs_integrate = di_kwargs_integrate[method]
+            for approach in kwargs_construct.keys():
+                print(f'Approach = {approach}')
+                kwargs_construct_approach = kwargs_construct[approach]
+                # Add on model predictor as f_theta
+                kwargs_construct_approach = {**kwargs_construct_approach, **{'f_theta':predictor['mdl'][method]}}
+                # Set up integrator
+                method_integrator = integrator(**kwargs_construct_approach)
+                # Run the integration
+                integrator_risk,  integrator_lossvar = method_integrator.integrate(**kwargs_integrate)
+                # Append results
+                di_ret[model]['risk'].append(integrator_risk)
+                di_ret[model]['lossvar'].append(integrator_lossvar)
     
-
     # (vi) Print results (optional)
     if verbose:
         for method, res in di_ret.items():
             print(f'--- Coefficient = {method} ---')
             print([f'{r:.2f}' for r in res['risk']])
-
     return di_ret

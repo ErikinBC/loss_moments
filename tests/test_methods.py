@@ -48,9 +48,26 @@ class TestIntegrators:
 
     def _test_f_theta(self):
         """Checks that f_theta is valid"""
-        integrator_joint_expon = self.method_class(loss=loss_fun_works, dist_joint=dist_expon_yx)
-        integrator_cond_expon = self.method_class(loss=loss_fun_works, 
-                        dist_X_uncond=dist_expon_x, dist_Y_condX=dist_expon_y_x)
+        # Assume a linear mapping
+        cusotm_f_theta = f_theta= lambda x: x.dot(dist_expon_y_x.theta)
+        # Check the joint distribution
+        integrator_joint_expon = self.method_class(loss=loss_fun_works, dist_joint=dist_expon_yx, f_theta=cusotm_f_theta)
+        try:
+            integrator_joint_expon.integrate(self.kwargs_var_seed)
+        except:
+            breakpoint()
+            integrator_joint_expon.integrate(self.kwargs_var_seed)
+        # Check the conditional distribution
+        integrator_cond_expon = self.method_class(
+                        loss=loss_fun_works, 
+                        dist_X_uncond=dist_expon_x, 
+                        dist_Y_condX=dist_expon_y_x, 
+                        f_theta = cusotm_f_theta)
+        try:
+            integrator_cond_expon.integrate(self.kwargs_var_seed)
+        except:
+            breakpoint()
+            integrator_cond_expon.integrate(self.kwargs_var_seed)
 
 
     def _test_only_joint_distribution(self):
