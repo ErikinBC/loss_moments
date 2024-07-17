@@ -19,10 +19,13 @@ class MonteCarloIntegrator(BaseIntegrator):
                  loss: Callable[..., Any], 
                  dist_joint: multivariate_normal_frozen | None = None, 
                  dist_X_uncond: rv_continuous_frozen | None = None, 
-                 dist_Y_condX: Callable[..., Any] | None = None
+                 dist_Y_condX: Callable[..., Any] | None = None,
+                 f_theta: Union[Callable, None] = None, 
                  ):
         """Initialize the Monte Carlo Integration class. See _base.BaseIntegrator for constructor argument details."""
-        super().__init__(loss, dist_joint, dist_X_uncond, dist_Y_condX)
+        super().__init__(loss=loss, dist_joint=dist_joint, 
+                         dist_X_uncond=dist_X_uncond, dist_Y_condX=dist_Y_condX, 
+                         f_theta=f_theta)
         
     def _draw_samples(self, num_samples: int, seed: int | None) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -35,7 +38,9 @@ class MonteCarloIntegrator(BaseIntegrator):
             Y_i | X_i \sim F_{Y | X}
         """
         if self.has_joint:
-            y_samples, x_samples = self.dist_joint.rvs(num_samples, random_state=seed).T
+            yx_samples = self.dist_joint.rvs(num_samples, random_state=seed).T
+            y_samples = yx_samples[0]
+            x_samples = np.squeeze(yx_samples[1:].T)
         else:
             x_samples = self.dist_X_uncond.rvs(num_samples, random_state=seed)
             y_samples = self.dist_Y_condX(x_samples).rvs(num_samples, random_state=seed+1)
@@ -48,7 +53,7 @@ class MonteCarloIntegrator(BaseIntegrator):
         # Draw samples with the pre-defines method
         y_samples, x_samples = self._draw_samples(num_samples, seed)
         # Calculate the losses
-        losses = self.loss(y=y_samples, x=x_samples)
+        losses = self._loss_f_theta(y=y_samples, x=x_samples)
         res = np.mean(losses)
         if calc_variance:
             # Add on variance if requested
@@ -111,10 +116,13 @@ class NumericalIntegrator(BaseIntegrator):
                 loss: Callable[..., Any], 
                 dist_joint: multivariate_normal_frozen | None = None, 
                 dist_X_uncond: rv_continuous_frozen | None = None, 
-                dist_Y_condX: Callable[..., Any] | None = None
+                dist_Y_condX: Callable[..., Any] | None = None,
+                f_theta: Union[Callable, None] = None,
                 ):
         """Initialize the Numerical Integration class. See utils.BaseIntegrator for constructor arguments."""
-        super().__init__(loss, dist_joint, dist_X_uncond, dist_Y_condX)
+        super().__init__(loss=loss, dist_joint=dist_joint, 
+                         dist_X_uncond=dist_X_uncond, dist_Y_condX=dist_Y_condX, 
+                         f_theta=f_theta)
         # Assign the dictionary/methods that will get called later
         self.di_methods = {
                     'trapz_loop': 
@@ -173,13 +181,13 @@ class NumericalIntegrator(BaseIntegrator):
         
     def _integrand_for_quad(self, y, x) -> float | np.ndarray:
         """Compute the integrand for joint integration."""
-        loss_values = self.loss(y=y, x=x)
+        loss_values = self._loss_f_theta(y=y, x=x)
         density = self.dist_joint.pdf([y, x])
         return loss_values * density
 
     def _integrand2_for_quad(self, y, x) -> float | np.ndarray:
         """Compute the integrand for joint integration (variance calculation)."""
-        loss_values = self.loss(y=y, x=x) ** 2
+        loss_values = self._loss_f_theta(y=y, x=x) ** 2
         density = self.dist_joint.pdf([y, x])
         return loss_values * density
 
@@ -232,7 +240,7 @@ class NumericalIntegrator(BaseIntegrator):
         # Get the grid of values
         Yvals, Xvals = np.meshgrid(yvals, xvals)
         # Get the n_Y by n_X loss
-        loss_values = np.power(self.loss(Yvals, Xvals), power)
+        loss_values = np.power(self._loss_f_theta(Yvals, Xvals), power)
         if self.has_joint:
             # For the joint distribution, the inner integral is the same thing as the outer intergrand
             density_inner = self.dist_joint.pdf(np.dstack((Yvals, Xvals)))
@@ -258,7 +266,7 @@ class NumericalIntegrator(BaseIntegrator):
             if self.has_joint:
                 # For joint distribution, the inner integral is weighted by the joint PDF, and this is equivalent to the outer integrand
                 for i, x_i in enumerate(xvals):
-                    inner_integrand_i = np.power(self.loss(yvals, x_i), power)
+                    inner_integrand_i = np.power(self._loss_f_theta(yvals, x_i), power)
                     points_i = np.c_[yvals, np.broadcast_to(x_i, yvals.shape)]
                     inner_integrand_i *= self.dist_joint.pdf(points_i)
                     inner_integral[i] = np.trapz(inner_integrand_i, yvals)
@@ -267,7 +275,7 @@ class NumericalIntegrator(BaseIntegrator):
             else:
                 # For the conditional distribution, the inner integral is weighted by the conditional distribution
                 for i, x_i in enumerate(xvals):
-                    inner_integrand_i = np.power(self.loss(yvals, x_i), power)
+                    inner_integrand_i = np.power(self._loss_f_theta(yvals, x_i), power)
                     inner_integrand_i *= self.dist_Y_condX(x_i).pdf(yvals)
                     inner_integral[i] = np.trapz(inner_integrand_i, yvals)
                 # The outer integrand is the inner integral weighted by the feature space

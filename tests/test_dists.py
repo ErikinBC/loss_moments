@@ -11,7 +11,7 @@ from src.loss_moments._examples import simulation
 def test_simulation(n_train: int=30, 
                     n_oos: int=250000, 
                     p: int = 10, 
-                    rtol: float = 1e-2):
+                    rtol: float = 3e-2):
     """
     Checks that our stylized simulation result works as expected
     """

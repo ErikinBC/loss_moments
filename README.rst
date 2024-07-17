@@ -36,6 +36,17 @@ Features
         * Conditional (Trapezoidal)
 
 
+Development
+-----------
+
+After making changes, try running (from the main directory)
+
+.. code:: bash
+
+        source src/loss_moments.sh
+
+This will call both the unit tests and the main module.
+
 Credits
 -------
 

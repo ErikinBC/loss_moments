@@ -11,7 +11,7 @@ from typing import Callable, Union
 from scipy.stats._multivariate import multivariate_normal_frozen
 from scipy.stats._distn_infrastructure import rv_continuous_frozen, rv_discrete_frozen
 # Internal modules
-from .utils import dist_Ycond_BVN, _is_int
+from .utils import dist_Ycond_BVN, is_int, find_mandatory_kwargs
 
 # Define all distributions that quality for valid BVNs
 accepted_dists = (multivariate_normal_frozen, rv_continuous_frozen, rv_discrete_frozen, dist_Ycond_BVN)
@@ -22,31 +22,42 @@ class BaseIntegrator:
                  loss: Callable,
                  dist_joint: Union[multivariate_normal_frozen, None] = None,
                  dist_X_uncond: Union[rv_continuous_frozen, None] = None,
-                 dist_Y_condX: Union[Callable, None] = None):
+                 dist_Y_condX: Union[Callable, None] = None,
+                 f_theta: Union[Callable, None] = None,
+                 ) -> None:
         """
         Initialize the BaseIntegrator with given parameters.
         
         Parameters
         ----------
         loss : Callable
-            Loss function to integrate.
+            Loss function to integrate (should produce something similar to "residuals")
         dist_joint : multivariate_normal_frozen, optional
             Joint distribution (for joint integration).
         dist_X_uncond : rv_continuous_frozen, optional
             Unconditional distribution of X (for conditional integration).
         dist_Y_condX : Callable, optional
             Conditional distribution of Y given X (for conditional integration).
+        f_theta : Callable, optional
+            A function that maps x to the same dimension as y (usually a scalar), e.g. the predict method of a trained model. Specifically for ONLY loss(y, f_theta(x))
         """
         # Input checks
         self.has_joint = self._check_atleast_one_dist(dist_joint=dist_joint, 
                                                 dist_X_uncond=dist_X_uncond,
                                                 dist_Y_condX=dist_Y_condX )
-        self._input_checks(loss=loss, dist1=dist_joint or dist_X_uncond, dist2=dist_Y_condX)
+        self._input_checks(loss=loss, dist1=dist_joint or dist_X_uncond, dist2=dist_Y_condX, f_theta=f_theta)
         # Assign attributes
         self.loss = loss
         self.dist_joint = dist_joint
         self.dist_X_uncond = dist_X_uncond
         self.dist_Y_condX = dist_Y_condX
+        if f_theta is None:
+            f_theta = lambda x: x
+        self.f_theta = f_theta
+
+    def _loss_f_theta(self, y, x):
+        """Convenience wrapper for calling the loss function"""
+        return self.loss(y=y, x=self.f_theta(x))
 
     @staticmethod
     def _subset_args(di: dict, func: Callable) -> dict:
@@ -89,7 +100,8 @@ class BaseIntegrator:
                     num_samples = None, 
                     seed = None, 
                     dist2 = None, 
-                    k_sd = None
+                    k_sd = None,
+                    f_theta = None,
                     ) -> None:
         """Makes sure that MCI/NumInt arguments are as expected, assertion checks only"""
         # Check the loss function
@@ -105,11 +117,16 @@ class BaseIntegrator:
         # Check (possibly) second dist
         if dist2 is not None:
             assert isinstance(dist2, Callable), f'the second distribution must a callable function, not {type(dist2)}'
+        # Check (possibly) f_theta
+        if f_theta is not None:
+            assert isinstance(f_theta, Callable), f'f_theta must be callable'
+            needed_args = find_mandatory_kwargs(f_theta)
+            assert len(np.setdiff1d(needed_args, ['x'])) == 0, 'x should be the needed argument for f_theta'
         # Check numeric parameters
         if num_samples is not None:
             assert num_samples > 1, f'You must have num_samples > 1, not {num_samples}'
         if seed is not None:
-            assert _is_int(seed), f'seed must be an integer, not {seed}'
+            assert is_int(seed), f'seed must be an integer, not {seed}'
             assert seed >= 0, f'seed must be positive, not {seed}'
         if k_sd is not None:
             assert k_sd > 0, f'k must be strictkly positive, not {k_sd}'
@@ -120,7 +137,7 @@ class BaseIntegrator:
         if num_samples is not None:
             assert num_samples > 1, f'You must have num_samples > 1, not {num_samples}'
         if seed is not None:
-            assert _is_int(seed), f'seed must be an integer, not {seed}'
+            assert is_int(seed), f'seed must be an integer, not {seed}'
             assert seed >= 0, f'seed must be positive, not {seed}'
     
     @staticmethod

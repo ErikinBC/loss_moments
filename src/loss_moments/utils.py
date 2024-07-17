@@ -5,10 +5,29 @@ Utility files
 # External modules
 import numpy as np
 from scipy import stats
+from typing import Callable
+from inspect import signature, Parameter
 
-def _is_int(x):
+def is_int(x):
     """Checks that x is an integer"""
     return int(x) == x
+
+def find_mandatory_kwargs(func) -> list:
+    """Find the mandatory named key word arguments of any function"""
+    assert isinstance(func, Callable), 'func needs to be callable'
+    # Get the signature of the function
+    sig = signature(func)
+    # Get the parameters of the function
+    params = sig.parameters
+    # List to hold the names of mandatory arguments
+    mandatory_args = []
+    # Iterate through the parameters
+    for name, param in params.items():
+        # Check if the parameter is positional-only or keyword-only and does not have a default value
+        if param.default == Parameter.empty:
+            mandatory_args.append(name)
+    return mandatory_args
+
 
 class dist_Ycond_BVN:
     def __init__(self, mu_Y, sigma_Y, sigma_X, rho, mu_X):

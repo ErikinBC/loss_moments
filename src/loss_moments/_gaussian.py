@@ -6,7 +6,23 @@ import numpy as np
 from typing import Tuple
 from scipy.stats import norm, multivariate_normal
 
-# Create a data generating process
+
+class linear_predictor():
+    """Convenience wrapper for a trained model to return a predicted value"""
+    def __init__(self, weights: np.ndarray) -> None:
+        self.weights = np.atleast_1d(weights)
+        self.p = len(self.weights)
+    
+    def __call__(self, x: np.ndarray) -> np.ndarray:
+        l_x_shape = len(x.shape)
+        assert l_x_shape in [1, 2], f'x should have 1 or two dimensions, not {l_x_shape}'
+        if l_x_shape == 1:
+            assert self.p == 1, f'If x is a 1-d array, weights needs to be a scalar'
+            return x * self.weights
+        else:
+            return x.dot(self.weights)
+
+
 class dgp_yx():
     def __init__(self, 
                     p: int = 10, 
@@ -15,6 +31,7 @@ class dgp_yx():
                 ) -> None:
         """
         Construct a simple data generating process (DGP):
+
         X ~ MVN(0, Sigma)
         u ~ N(0, sigma^2_u)
         beta ~ N(0, 1/sqrt(p))
@@ -27,13 +44,19 @@ class dgp_yx():
         self.dist_u = norm(loc=0, scale=sigma_u)
         self.Sigma = norm().rvs(size=(p, p), random_state=seed)
         self.Sigma = self.Sigma.T.dot(self.Sigma)
+        self.Sigma /= np.max(np.abs(self.Sigma))
         self.dist_x = multivariate_normal(cov=self.Sigma)
         self.beta = norm(scale=1/np.sqrt(p)).rvs(size=p, random_state=seed)
         # define the conditional distribution: y | x
         self.dist_ycond = lambda x: norm(loc=x.dot(self.beta), scale=sigma_u)
+        cov_y = self.beta.dot(self.Sigma).dot(self.beta) + sigma2_u
+        cov_yx = self.beta.dot(self.Sigma)
+        cov_joint = np.vstack([
+            np.hstack((cov_y, cov_yx)),
+            np.hstack((np.atleast_2d(cov_yx).T, self.Sigma)),
+        ])
+        self.dist_yx = multivariate_normal(cov=cov_joint)
         
-        
-    
     def gen_yX(
                 self, 
                 n: int, 
