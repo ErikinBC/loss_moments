@@ -28,3 +28,5 @@ def test_simulation(n_train: int=30,
                     # The i/j'th approach should be roughly similar
                     np.testing.assert_allclose(values[i], values[j], rtol=rtol, 
                                 err_msg=f'Tolerance failed for {metric}')
+    # Confirm end
+    print('\n~~~ test_simulation completed within tolerance ~~~\n')
