@@ -61,14 +61,14 @@ def simulation(
     # (iv) Set the MCI integral functions for:
     #   a) Integration approaches (joint vs cond/uncond)
     #   b) Algorithms (oracle, theta, gamma)
-    kwargs_joint = {'loss':squared_error, 'dist_joint':generator.dist_yx}
-    kwargs_cond = {'loss':squared_error, 'dist_X_uncond':generator.dist_x, 'dist_Y_condX':generator.dist_ycond}
-    mci_joint_oracle = MonteCarloIntegrator(**{**kwargs_joint, **{'f_theta':mdl_oracle}})
-    mci_cond_oracle = MonteCarloIntegrator(**{**kwargs_cond, **{'f_theta':mdl_oracle}})
-    mci_joint_theta = MonteCarloIntegrator(**{**kwargs_joint, **{'f_theta':mdl_theta}})
-    mci_cond_theta = MonteCarloIntegrator(**{**kwargs_cond, **{'f_theta':mdl_theta}})
-    mci_joint_gamma = MonteCarloIntegrator(**{**kwargs_joint, **{'f_theta':mdl_gamma}})
-    mci_cond_gamma = MonteCarloIntegrator(**{**kwargs_cond, **{'f_theta':mdl_gamma}})
+    kwargs_joint_mci = {'loss':squared_error, 'dist_joint':generator.dist_yx}
+    kwargs_cond_mci = {'loss':squared_error, 'dist_X_uncond':generator.dist_x, 'dist_Y_condX':generator.dist_ycondx}
+    mci_joint_oracle = MonteCarloIntegrator(**{**kwargs_joint_mci, **{'f_theta':mdl_oracle}})
+    mci_cond_oracle = MonteCarloIntegrator(**{**kwargs_cond_mci, **{'f_theta':mdl_oracle}})
+    mci_joint_theta = MonteCarloIntegrator(**{**kwargs_joint_mci, **{'f_theta':mdl_theta}})
+    mci_cond_theta = MonteCarloIntegrator(**{**kwargs_cond_mci, **{'f_theta':mdl_theta}})
+    mci_joint_gamma = MonteCarloIntegrator(**{**kwargs_joint_mci, **{'f_theta':mdl_gamma}})
+    mci_cond_gamma = MonteCarloIntegrator(**{**kwargs_cond_mci, **{'f_theta':mdl_gamma}})
     # Call the monte carlo integration
     kwargs_method_integrate = {'num_samples':10000, 'calc_variance':True, 'seed':seed, 'n_chunks':10}
     mci_joint_risk_oracle, mci_joint_lossvar_oracle = mci_joint_oracle.integrate(**kwargs_method_integrate)
@@ -77,10 +77,15 @@ def simulation(
     mci_cond_risk_theta, mci_cond_lossvar_theta = mci_cond_theta.integrate(**kwargs_method_integrate)
     mci_joint_risk_gamma, mci_joint_lossvar_gamma = mci_joint_gamma.integrate(**kwargs_method_integrate)
     mci_cond_risk_gamma, mci_cond_lossvar_gamma = mci_cond_gamma.integrate(**kwargs_method_integrate)
-    # print(f'Risk ~ Oracle: Empirical={emp_risk_oracle:.2f}, theory={theory_risk_oracle:.2f}, joint={mci_joint_risk_oracle:.2f}, conditional={mci_cond_risk_oracle:.2f}')
-    # print(f'Loss Variance ~ Oracle: Empirical={emp_lossvar_oracle:.2f}, theory={theory_lossvar_oracle:.2f}, joint={mci_joint_lossvar_oracle:.2f}, conditonal={mci_cond_lossvar_oracle:.2f}')
 
-    # (v) Print results
+    # # (v) For numerical integration, x has to be uni-dimensional, which in this case means we need to know the distribution of (y, f_theta), f_theta, and y | f_theta. I'll denote f_theta as eta for simplicity.
+    # dist_y_eta, dist_eta, dist_ycond_eta = generator.gen_f_theta_dists(theta=beta_oracle)
+    # kwargs_joint_numint = {'loss':squared_error, 'dist_joint':...}
+    # kwargs_cond_numint = {'loss':squared_error, 'dist_X_uncond':..., 'dist_Y_condX':...}
+    # numint_joint_oracle = NumericalIntegrator()
+    
+
+    # (vi) Print results (optional)
     if verbose:
         print('\n--- Risk ---')
         print(f'oracle: Empirical={emp_risk_oracle:.2f}, theory={theory_risk_oracle:.2f}')
@@ -92,23 +97,23 @@ def simulation(
         print(f'theta: Empirical={emp_lossvar_theta:.2f}, theory={theory_lossvar_theta:.2f}, integral={0:.2f}')
         print(f'gamma: Empirical={emp_lossvar_gamma:.2f}, theory={theory_lossvar_gamma:.2f}, integral={0:.2f}')
 
-    # Return values (for unit testing)
+    # (vii) Return values (for unit testing)
     di_ret = {
-                'oracle':
+                'oracle_mci':
                     {
                         'risk':[emp_risk_oracle, theory_risk_oracle, 
                                 mci_joint_risk_oracle, mci_cond_risk_oracle, ],   
                         'lossvar': [emp_lossvar_oracle, theory_lossvar_oracle, 
                                     mci_joint_lossvar_oracle, mci_cond_lossvar_oracle],
                     },
-                'theta':
+                'theta_mci':
                     {
                         'risk':[emp_risk_theta, theory_risk_theta, 
                                 mci_joint_risk_theta, mci_cond_risk_theta,],
                         'lossvar': [emp_lossvar_theta, theory_lossvar_theta, 
                                     mci_joint_lossvar_theta, mci_cond_lossvar_theta, ], 
                     },
-                'gamma':
+                'gamma_mci':
                     {
                         'risk':[emp_risk_gamma, theory_risk_gamma, 
                                 mci_joint_risk_gamma, mci_cond_risk_gamma, ],

@@ -11,6 +11,7 @@ import numpy as np
 from . import atol
 from . import loss_fun_works, loss_fun_fails
 from . import dist_BVN, dist_X_uni, dist_Ycond
+from . import dist_expon_x, dist_expon_y_x, dist_expon_yx
 from . import di_kwargs_integrate_method, di_methods
 
 
@@ -27,38 +28,47 @@ class TestIntegrators:
         self.kwargs_var_seed = self.di_kwargs['var']
         assert hasattr(self.method_class, 'integrate')
         # Test the setups
-        mci1 = self._test_only_joint_distribution()
-        mci2 = self._test_unconditional_and_conditional_distribution()
+        intergator_joint_gauss = self._test_only_joint_distribution()
+        intergator_cond_gauss = self._test_unconditional_and_conditional_distribution()
         # Test integrals
-        mu1b, var1b = self._test_integration_results(mci1)
-        mu2b, var2b = self._test_integration_results(mci2)
+        mu1b, var1b = self._test_integration_results(intergator_joint_gauss)
+        mu2b, var2b = self._test_integration_results(intergator_cond_gauss)
         # Test equivalence between conditional/unconditional vs joint
         np.testing.assert_allclose(mu1b, mu2b, atol=atol)
         np.testing.assert_allclose(var1b, var2b, atol=atol)
         print(f'\nPassed all tests for {method_name}\n')
+        # Check the different f-theta's
+        self._test_f_theta()
+
 
     def _test_missing_distribution(self):
         """Method construction needs at least one distribution"""
         with pytest.raises(AssertionError):
             self.method_class(loss=loss_fun_works)
 
+    def _test_f_theta(self):
+        """Checks that f_theta is valid"""
+        integrator_joint_expon = self.method_class(loss=loss_fun_works, dist_joint=dist_expon_yx)
+        integrator_cond_expon = self.method_class(loss=loss_fun_works, 
+                        dist_X_uncond=dist_expon_x, dist_Y_condX=dist_expon_y_x)
+
 
     def _test_only_joint_distribution(self):
         """When the joint is provided the conditional/unconditional should be None"""
-        mci1 = self.method_class(loss=loss_fun_works, dist_joint=dist_BVN)
-        assert mci1.dist_X_uncond is None
-        assert mci1.dist_Y_condX is None
+        intergator_joint_gauss = self.method_class(loss=loss_fun_works, dist_joint=dist_BVN)
+        assert intergator_joint_gauss.dist_X_uncond is None
+        assert intergator_joint_gauss.dist_Y_condX is None
         with pytest.raises(AssertionError):
             self.method_class(loss=loss_fun_fails, dist_joint=dist_BVN)
-        return mci1
+        return intergator_joint_gauss
 
     def _test_unconditional_and_conditional_distribution(self):
         """When the conditional/unconditional is provided the joint should be None"""
-        mci2 = self.method_class(loss=loss_fun_works, dist_X_uncond=dist_X_uni, dist_Y_condX=dist_Ycond)
-        assert mci2.dist_joint is None
+        intergator_cond_gauss = self.method_class(loss=loss_fun_works, dist_X_uncond=dist_X_uni, dist_Y_condX=dist_Ycond)
+        assert intergator_cond_gauss.dist_joint is None
         with pytest.raises(AssertionError):
             self.method_class(loss=loss_fun_fails, dist_X_uncond=dist_X_uni, dist_Y_condX=dist_Ycond)
-        return mci2
+        return intergator_cond_gauss
 
     def _test_invalid_conditional_distribution(self):
         """You should not be able to assign Y_condX that isn't a callable"""

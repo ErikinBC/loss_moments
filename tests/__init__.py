@@ -6,7 +6,8 @@ This initialization script contains the parameters used in the test_{filename}.p
 
 # External
 import numpy as np
-from scipy.stats import multivariate_normal, norm
+from scipy.stats import multivariate_normal, norm, expon, rv_continuous
+from scipy.stats._distn_infrastructure import rv_continuous_frozen
 # Internal
 from src.loss_moments.methods import MonteCarloIntegrator, NumericalIntegrator
 
@@ -23,6 +24,9 @@ def loss_fun_works(y, x):
 def loss_fun_fails(y, z):
     """Loss function should have named argument x rather than z"""
     return np.abs(y) * np.log(z **2)
+
+# Test f_theta's
+
 
 
 # Integrate method function arguments for the different methods
@@ -60,5 +64,61 @@ dist_BVN = multivariate_normal(mean=[mu_Y, mu_X], cov=[[sigma2_Y, off_diag],[off
 dist_X_uni = norm(loc=mu_X, scale=np.sqrt(sigma2_X))
 dist_Ycond = lambda x: norm(loc=mu_Y + rho*(sigma2_Y/sigma2_X)**0.5*(x - mu_X), scale=np.sqrt(sigma2_Y * (1-rho**2)))
 
-# Set up a multivariate joint distribution in the Gaussian case
+# Set up a multivariate joint distribution in the non-Gaussian case
+class correlated_expon_yX_gen(rv_continuous):
+    def __init__(self, p: int = 5, rate: float = 2, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.p = p
+        self.dist_y = expon(loc=rate, scale=rate+1)
+        self.dist_x = correlated_expon_X_gen(p=p, rate=rate)
 
+    def _rvs(self, size=None, random_state=None):
+        x = self.dist_x.rvs(size, random_state)
+        y = self.dist_y.rvs(size, random_state) + x.mean(axis=1)
+        yx = np.hstack((y, x))
+        return yx
+    
+    def _pdf(self, x):
+        # This is not technically correct, just making sure it works computationally
+        f_y = self.dist_y.pdf(x[:,0])
+        f_x = self.dist_x.pdf(x[:,1:]).mean(axis=1)
+        return f_y + f_x
+
+
+class correlated_expon_X_gen(rv_continuous):
+    def __init__(self, p: int = 5, rate: float = 2, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.p = p
+        self.dist_corr = expon(scale=rate)
+        self.dist_indep = expon(scale=np.repeat(rate, p))
+
+    def _rvs(self, size=None, random_state=None):
+        u = self.dist_corr.rvs(size=(size, self.p), random_state=random_state)
+        x = self.dist_indep.rvs(size=(size, self.p), random_state=random_state)
+        z = x + np.atleast_2d(u).T
+        return z
+    
+    def _pdf(self, x):
+        # This is not technically correct, just making sure it works computationally
+        f = self.dist_indep.pdf(x).mean(axis=1)
+        return f
+
+class y_expon_X_gen():
+    def __init__(self, p: int = 5, *args, **kwargs):
+        super().__init__(*args, **kwargs)    
+        self.p = p
+        self.theta = expon().rvs(p, seed)
+    
+    def __call__(self, x: np.ndarray):
+        eta = x.dot(self.theta)
+        return expon(loc=np.abs(eta), scale=eta**2)
+
+
+# # I THINK THIS SHUOLD FAIL B/C X IS MULTIDIMENSIONAL!
+# def dist_yx_expon(x):
+#     return expon(loc=np.abs(x), scale=x**2)
+expon_x = correlated_expon_X_gen()
+expon_yx = correlated_expon_yX_gen()
+dist_expon_x = expon_x()
+dist_expon_y_x = y_expon_X_gen(p=expon_x.p)
+dist_expon_yx = expon_yx()

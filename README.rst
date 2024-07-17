@@ -2,6 +2,8 @@
 Loss Function Moments
 =====================
 
+.. role:: raw-math(raw)
+    :format: latex html
 
 .. image:: https://img.shields.io/pypi/v/loss_moments.svg
         :target: https://pypi.python.org/pypi/loss_moments
@@ -14,11 +16,14 @@ Loss Function Moments
         :alt: Documentation Status
 
 
-Package to help calculate the mean and variance (first and second moments) of a loss function :math:`\ell` for a supervised ML model:
+Package to help calculate the mean and variance (first and second moments) of a loss function :raw-math:`$\ell(\cdot)$` for a supervised ML model:
 
-:raw-math:`$$ R(\theta; f) = E_{(y,x) \sim P_{h(\phi)}}[\ell(y, f_\theta(x))] $$`
-:raw-math:`$$ V(\theta; f) = E_{(y,x) \sim P_{h(\phi)}}[ (\ell(y, f_\theta(x)) - R(\theta))^2 ] $$`
-  
+:raw-math:`$$
+\begin{align*}
+R(\theta; f) &= E_{(y,x) \sim P_{h(\phi)}}[\ell(y, f_\theta(x))] \\
+V(\theta; f) &= E_{(y,x) \sim P_{h(\phi)}}[ (\ell(y, f_\theta(x)) - R(\theta))^2 ]
+\end{align*}
+$$`
 
 For more information about notation and theory, see this blog post: `SOME TITLE <http://www.erikdrysdale.com/.../>`_.
 
