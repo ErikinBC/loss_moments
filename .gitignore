@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Ignore scratch in the main folder
+scratch.py
+
 # C extensions
 *.so
 

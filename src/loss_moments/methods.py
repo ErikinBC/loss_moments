@@ -103,9 +103,12 @@ class MonteCarloIntegrator(BaseIntegrator):
         # Input checks
         assert n_chunks >= 1, f'n_chunks needs to be >=1, not {n_chunks}'
         # Run calculations
-        res = [self._integrate(num_samples, calc_variance, seed=self._seed_increment(seed,chunk-1)) 
-                for chunk in range(1,n_chunks+1)]
-        res = np.vstack(res).mean(axis=0)
+        holder = []
+        for chunk in range(1,n_chunks+1):
+            seed_chunk = self._seed_increment(seed,chunk-1)
+            tmp_res = self._integrate(num_samples, calc_variance, seed=seed_chunk)
+            holder.append(tmp_res)
+        res = np.vstack(holder).mean(axis=0)
         res = self._return_tuple_or_float(res)
         return res
 
