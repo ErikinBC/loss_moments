@@ -11,9 +11,8 @@ import numpy as np
 from . import atol
 from . import loss_fun_works, loss_fun_fails
 from . import dist_BVN, dist_X_uni, dist_Ycond
-from . import dist_expon_x, dist_expon_y_x, dist_expon_yx
+from . import di_dists_expon, di_f_theta
 from . import di_kwargs_integrate_method, di_methods
-from . import f_theta_works_v1, f_theta_works_v2, f_theta_fails_v1, f_theta_fails_v2
 
 class TestIntegrators:
     @pytest.mark.parametrize("method_name", list(di_methods.keys()))
@@ -27,52 +26,41 @@ class TestIntegrators:
         self.kwargs_mu_seed = self.di_kwargs['mu']
         self.kwargs_var_seed = self.di_kwargs['var']
         assert hasattr(self.method_class, 'integrate')
-        # # (ii) Test Gaussian (univariate) results
-        # intergator_joint_gauss = self._test_joint_construct_gauss()
-        # intergator_cond_gauss = self._test_cond_construct_gauss()
-        # # Test integrals
-        # mu1b, var1b = self._test_integration_gauss(intergator_joint_gauss)
-        # mu2b, var2b = self._test_integration_gauss(intergator_cond_gauss)
-        # # Test equivalence between conditional/unconditional vs joint
-        # np.testing.assert_allclose(mu1b, mu2b, atol=atol)
-        # np.testing.assert_allclose(var1b, var2b, atol=atol)
+        
+        # (ii) Test Gaussian (univariate) results
+        intergator_joint_gauss = self._test_joint_construct_gauss()
+        intergator_cond_gauss = self._test_cond_construct_gauss()
+        # Test integrals
+        mu1b, var1b = self._test_integration_gauss(intergator_joint_gauss)
+        mu2b, var2b = self._test_integration_gauss(intergator_cond_gauss)
+        # Test equivalence between conditional/unconditional vs joint
+        np.testing.assert_allclose(mu1b, mu2b, atol=atol)
+        np.testing.assert_allclose(var1b, var2b, atol=atol)
 
         # (iii) Test Non-Gaussian (multivariate_ results)
-        #       These methods also need an f_theta function to map the vector
-        self.kwargs_construct_expon_joint = {'loss':loss_fun_works, 'dist_joint': dist_expon_yx}
-        self.kwargs_construct_expon_cond = {'loss':loss_fun_works, 'dist_X_uncond': dist_expon_x, 'dist_Y_condX': dist_expon_y_x}
-        # Construct the different methods
-        self._test_joint_construct_expon()
-        self._test_cond_construct_expon()
+        # Determine the joint and conditional distributions
+        dists_expon = di_dists_expon[method_name]
+        self.kwargs_construct_expon_joint = {'loss':loss_fun_works, 'dist_joint': dists_expon['dist_joint']}
+        self.kwargs_construct_expon_cond = {'loss':loss_fun_works, 'dist_X_uncond': dists_expon['dist_X_uncond'], 'dist_Y_condX': dists_expon['dist_Y_condX']}
+        # Determine the working and failing f_theta functions
+        working_f_theta = di_f_theta[method_name]['works']
+        failing_f_theta = di_f_theta[method_name]['fails']
+        lst_f_theta = working_f_theta + failing_f_theta
+        # Loop over the working f_theta's
+        for f_theta in lst_f_theta:
+            # Set up to the integrators
+            integrator_joint = self._test_joint_construct_expon(f_theta)
+            integrator_cond = self._test_cond_construct_expon(f_theta)
+            if f_theta in working_f_theta:  # Should execute
+                self._test_integrate_expon(integrator_joint)
+                self._test_integrate_expon(integrator_cond)
+            else:  # Should fail
+                with pytest.raises(ValueError):
+                        self._test_integrate_expon(integrator_joint)
         # Check the integration call
-        self._test_joint_integrate_expon()
-
         print(f'\nPassed all tests for {method_name}\n')
 
-    def _test_joint_construct_expon(self):
-        """Should be able to return the constructed classes"""
-        self.intergator_joint_expon_w1 = self.method_class(**{**self.kwargs_construct_expon_joint, 'f_theta': f_theta_works_v1})
-        self.intergator_joint_expon_w2 = self.method_class(**{**self.kwargs_construct_expon_joint, 'f_theta': f_theta_works_v2})
-        self.intergator_joint_expon_f1 = self.method_class(**{**self.kwargs_construct_expon_joint, 'f_theta': f_theta_fails_v1})
-        self.intergator_joint_expon_f2 = self.method_class(**{**self.kwargs_construct_expon_joint, 'f_theta': f_theta_fails_v2})
-
-    def _test_cond_construct_expon(self):
-        """Should be able to return the constructed class"""
-        self.intergator_cond_expon_w1 = self.method_class(**{**self.kwargs_construct_expon_cond, 'f_theta': f_theta_works_v1})
-        self.intergator_cond_expon_w2 = self.method_class(**{**self.kwargs_construct_expon_cond, 'f_theta': f_theta_works_v2})
-        self.intergator_cond_expon_f1 = self.method_class(**{**self.kwargs_construct_expon_cond, 'f_theta': f_theta_fails_v1})
-        self.intergator_cond_expon_f2 = self.method_class(**{**self.kwargs_construct_expon_cond, 'f_theta': f_theta_fails_v2})
-
-    def _test_joint_integrate_expon(self):
-        """Make sure we can call the integrate method for the correct f_theta's, but not but the wrong f_theta's"""
-        risk_w1 = self.intergator_joint_expon_w1.integrate(**self.kwargs_mu_seed)
-        _, lossvar_w1 = self.intergator_joint_expon_w1.integrate(**self.kwargs_var_seed)
-        np.testing.assert_equal(risk_w1, _)
-        risk_w2 = self.intergator_joint_expon_w2.integrate(**self.kwargs_mu_seed)
-        _, lossvar_w2 = self.intergator_joint_expon_w2.integrate(**self.kwargs_var_seed)
-        np.testing.assert_equal(risk_w2, _)
-
-
+    # --- GAUSSIAN TESTERS --- #
     def _test_missing_distribution(self):
         """Method construction needs at least one distribution"""
         with pytest.raises(AssertionError):
@@ -109,3 +97,19 @@ class TestIntegrators:
         assert isinstance(mu1a, float)
         assert mu1a == mu1b
         return mu1a, var1b
+
+    # --- NON-GAUSSIAN TESTERS --- #    
+    def _test_joint_construct_expon(self, f_theta):
+        """Should be able to return the constructed classes"""
+        return self.method_class(**{**self.kwargs_construct_expon_joint, 'f_theta': f_theta})
+
+    def _test_cond_construct_expon(self, f_theta):
+        """Should be able to return the constructed class"""
+        return self.method_class(**{**self.kwargs_construct_expon_cond, 'f_theta': f_theta})
+
+    def _test_integrate_expon(self, integrator):
+        """Make sure we can call the integrate method for the correct f_theta's, but not but the wrong f_theta's"""
+        risk = integrator.integrate(**self.kwargs_mu_seed)
+        _, lossvar = integrator.integrate(**self.kwargs_var_seed)
+        assert isinstance(lossvar, float)
+        np.testing.assert_equal(risk, _)

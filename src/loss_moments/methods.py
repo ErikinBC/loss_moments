@@ -43,7 +43,8 @@ class MonteCarloIntegrator(BaseIntegrator):
             x_samples = np.squeeze(yx_samples[1:].T)
         else:
             x_samples = self.dist_X_uncond.rvs(num_samples, random_state=seed)
-            y_samples = self.dist_Y_condX(x_samples).rvs(num_samples, random_state=seed+1)
+            dist_cond = self.dist_Y_condX(x_samples)
+            y_samples = dist_cond.rvs(num_samples, random_state=seed+1)
         return y_samples, x_samples
 
     def _integrate(self, num_samples, calc_variance, seed):
@@ -176,6 +177,7 @@ class NumericalIntegrator(BaseIntegrator):
             mu = np.array([mu_Y, mu_X])
             off_diag = rho * sigma_X * sigma_Y
             cov = np.array([[sigma_Y ** 2, off_diag], [off_diag, sigma_X ** 2]])
+            mu, cov = np.squeeze(mu), np.squeeze(cov)
             dist_joint = multivariate_normal(mean=mu, cov=cov)
             yx_bounds = np.atleast_2d(dist_joint.mean) + np.tile([-1, 1], [2, 1]).T * k_sd * np.sqrt(np.diag(dist_joint.cov))
         y_min, y_max = yx_bounds.T[0]
@@ -226,10 +228,11 @@ class NumericalIntegrator(BaseIntegrator):
         # Store function arguments
         di_args = {'yvals': yvals, 'xvals': xvals}
         # Calculate the risk
-        risk_var = self.di_grid_methods[use_grid](**di_args, power=1)
+        integrator = self.di_grid_methods[use_grid]
+        risk_var = integrator(**di_args, power=1)
         if calc_variance:
             # Add on the loss variance if it's requested
-            risk2_var = self.di_grid_methods[use_grid](**di_args, power=2)
+            risk2_var = integrator(**di_args, power=2)
             loss_var = risk2_var - risk_var**2
             risk_var = (risk_var, loss_var)
         res = self._return_tuple_or_float(risk_var)
@@ -243,7 +246,8 @@ class NumericalIntegrator(BaseIntegrator):
         # Get the grid of values
         Yvals, Xvals = np.meshgrid(yvals, xvals)
         # Get the n_Y by n_X loss
-        loss_values = np.power(self._loss_f_theta(Yvals, Xvals), power)
+        loss_values = self._loss_f_theta(Yvals, Xvals)
+        loss_values = np.power(loss_values, power)
         if self.has_joint:
             # For the joint distribution, the inner integral is the same thing as the outer intergrand
             density_inner = self.dist_joint.pdf(np.dstack((Yvals, Xvals)))
@@ -294,6 +298,7 @@ class NumericalIntegrator(BaseIntegrator):
                 n_Y: Union[int, np.ndarray] = 100,
                 n_X: Union[int, np.ndarray] = 101,
                 sol_tol: float = 1e-3,
+                seed: int | None = None,
                 ) -> Union[float, Tuple[float, float]]:
         """
         Calculates the integral of a l(y,x) assuming (y,x) ~ BVN, using a double integral approach and the trapezoidal rule. 

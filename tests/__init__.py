@@ -8,10 +8,9 @@ python3 tests/__init__.py
 
 # External
 import numpy as np
-from scipy.stats import multivariate_normal, norm, expon, rv_continuous
+from scipy.stats import multivariate_normal, norm, expon
 # Internal
 from src.loss_moments.methods import MonteCarloIntegrator, NumericalIntegrator
-
 
 # Parameters
 n_samp = 100000  # How many samples to draw?
@@ -28,10 +27,24 @@ def loss_fun_fails(y, z):
     return np.abs(y) * np.log(z **2)
 
 # Test f_theta's
-f_theta_works_v1 = lambda x: x.mean(axis=1)
-f_theta_works_v2 = lambda x: x.dot(norm().rvs(x.shape[1], x.shape[1]))
-f_theta_fails_v1 = lambda x: x
-f_theta_fails_v2 = lambda x: np.array([x.mean(), x.var()])
+def f_theta_mean(x):
+    z = np.atleast_1d(x)
+    if len(z.shape) == 1:
+        return z
+    else:
+        return z.mean(axis=1)
+
+def f_theta_coef(x):
+    z = np.atleast_1d(x)
+    if len(z.shape) == 1:
+        return x
+    else:
+        theta = norm().rvs(x.shape[1], x.shape[1])
+        return x.dot(theta)
+
+f_theta_identity = lambda x: x
+
+f_theta_tuple = lambda x: np.array([x.mean(), x.var()])
 
 
 # Integrate method function arguments for the different methods
@@ -69,88 +82,122 @@ dist_BVN = multivariate_normal(mean=[mu_Y, mu_X], cov=[[sigma2_Y, off_diag],[off
 dist_X_uni = norm(loc=mu_X, scale=np.sqrt(sigma2_X))
 dist_Ycond = lambda x: norm(loc=mu_Y + rho*(sigma2_Y/sigma2_X)**0.5*(x - mu_X), scale=np.sqrt(sigma2_Y * (1-rho**2)))
 
-class correlated_expon_X_gen(rv_continuous):
+class expon_X:
     """
     A class which generates correlated exponential data: X_j = expon_j(rate) + expon(rate)
 
     The .rvs() produces real correlated data, the pdf is made up
     """
-    _shape = 2  # How many "mandatory" parameters are there
-    def _argcheck(self, p, rate):
-        return (p > 0) & (rate > 0)
-
-    def _call_dist_corr(self, p, rate):
-        return expon(scale=rate + np.zeros(p))
-        
-    def _call_dist_indep(self, p, rate):
-        return expon(scale=rate)
-
-    def _rvs(self, p, rate, size=None, random_state=None):
-        """Returns a (size, p) array"""
-        dist_u = self._call_dist_indep(p, rate)
-        dist_x = self._call_dist_corr(p, rate)
-        u = dist_u.rvs(size=size, random_state=random_state)
-        u = np.atleast_2d(u).T  # Make into a column vector
-        breakpoint()
-        x = dist_x.rvs(size=size + (int(p),), random_state=random_state)
-        z = x + u
-        return z
+    def __init__(self, p: int, seed: int | None = None) -> None:
+        self.p = p
+        # Generate some scales
+        self.dist_z = expon(scale=expon().rvs(p, seed))
+        self.dist_u = expon(scale = 1)
     
-    def _pdf(self, x, p, rate):
-        """Need to reduce to vector"""
-        breakpoint()
-        dist_u = self._call_dist_indep(p, rate)
-        dist_x = self._call_dist_corr(p, rate)
-        f1 = dist_u.pdf(x).mean(axis=1)
-        f2 = dist_x.pdf(x).mean(axis=1)
-        return f1 + f2
+    def rvs(self, size=None, random_state=None) -> np.ndarray:
+        """Returns a (size, p) array"""
+        u = self.dist_u.rvs(size=size, random_state=random_state)
+        u = np.atleast_2d(u).T  # Make into a column vector
+        z = self.dist_z.rvs(size=(size, self.p), random_state=random_state)
+        x = z + u
+        x = np.squeeze(x)
+        return x
+    
+    def pdf(self, x: np.ndarray) -> np.ndarray:
+        """Maps the R^p vector to a scalar"""
+        f_u = self.dist_u.pdf(x)
+        f_z = self.dist_z.pdf(x)
+        if self.p > 1:
+            dens = f_u.mean(axis=1) + f_z.mean(axis = 1)
+        else:
+            dens = f_u + f_z
+        return dens
+
+    def mean(self):
+        return self.dist_z.mean()
+    
+    def std(self):
+        return self.dist_z.std()
 
 
-# Set up a multivariate joint distribution in the non-Gaussian case
-class correlated_expon_yX_gen(rv_continuous):
+class expon_yX:
     """
     A class where we pretend we know the joint distribution of (y, x) where y and x_j are all exponentials
     """
-    def __init__(self, p: int = 5, rate: float = 2, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, p: int, seed: int | None = None) -> None:
         self.p = p
-        self.dist_y = expon(loc=rate, scale=rate+1)
-        self.dist_x = correlated_expon_X_gen(p=p, rate=rate)
+        self.dist_y = expon(scale=expon().rvs(1, seed))
+        self.dist_x = expon_X(p=p, seed=seed)
+        self.mean = np.squeeze(expon().rvs(p+1, seed)) + 5
+        self.cov = np.squeeze(expon().rvs((p+1, p+1), seed))
+        self.cov = self.cov.T.dot(self.cov)
 
-    def _rvs(self, size=10, random_state = None):
+    def rvs(self, size=None, random_state=None):
         """
         When we generate data, we use correlated_expon_X_gen to generate correlate X data, and then have y be a mix of an exponential and an average of correlated exponentials
         """
-        breakpoint()
-        x = self.dist_x.rvs(size, 1)
-        y = self.dist_y.rvs(size, 1) + x.mean(axis=1)
+        x = self.dist_x.rvs(size, random_state)
+        y = self.dist_y.rvs(size, random_state)
+        if self.p > 1:
+            eta = x.mean(axis=1)
+        else:
+            eta = x
+        y += eta
         y = np.atleast_2d(y).T  # Make a column vector
         yx = np.hstack((y, x))
         return yx
     
-    def _pdf(self, x):
+    def pdf(self, x):
         # This is not technically correct, just making sure it works computationally
-        breakpoint()
-        f_y = self.dist_y.pdf(x[:,0])
-        f_x = self.dist_x.pdf(x[:,1:]).mean(axis=1)
-        return f_y + f_x
+        assert x.shape[-1] == 1 + self.p, f'expected x to have the last dimenions be of size {1 + self.p}, not {x.shape[-1]}'
+        yy = x[..., 0]
+        xx = np.squeeze(x[..., 1:])
+        f_y = self.dist_y.pdf(yy)
+        f_x = self.dist_x.pdf(xx)
+        if xx.ndim > yy.ndim:
+            f_x = np.mean(f_x, axis=-1)
+        dens = f_y + f_x
+        return dens
 
-
-class y_expon_X_gen():
-    # Return a conditional distrubtion as a function of x (basically the average of the vector determines the loc and scale)
-    def __init__(self, p: int = 5, *args, **kwargs):
-        super().__init__(*args, **kwargs)    
+class expon_y_cond_X:
+    """
+    A class where we pretend, conditional on x, the distribution of y is exponential
+    """
+    def __init__(self, p: int, seed: int | None = None) -> None:
         self.p = p
         self.theta = expon().rvs(p, seed)
     
     def __call__(self, x: np.ndarray):
-        breakpoint()
-        eta = x.dot(self.theta)
-        return expon(loc=np.abs(eta), scale=eta**2)
+        eta = x
+        if self.p > 1:
+            eta = eta.dot(self.theta)
+        cond_dist = expon(loc=np.abs(eta), scale=eta**2)
+        return cond_dist
 
-# Create the distributions to be used in the unit testing
-expon_x = correlated_expon_X_gen()
-expon_yx = correlated_expon_yX_gen()
-dist_expon_x = expon_x()
-dist_expon_y_x = y_expon_X_gen(p=expon_x.p)
-dist_expon_yx = expon_yx()
+# Create the distributions to be used in the unit testing (p > 1 can only be for monte carlo)
+p = 5
+di_dists_expon = {
+    'MonteCarloIntegrator': 
+        {'dist_joint': expon_yX(p=5, seed=seed), 
+         'dist_X_uncond': expon_X(p=5, seed=seed),
+         'dist_Y_condX': expon_y_cond_X(p=5, seed=seed),
+         },
+    'NumericalIntegrator_loop': 
+        {'dist_joint': expon_yX(p=1, seed=seed), 
+         'dist_X_uncond': expon_X(p=1, seed=seed),
+         'dist_Y_condX': expon_y_cond_X(p=1, seed=seed),
+         },
+}
+# Distributions are the same for the grip method
+di_dists_expon['NumericalIntegrator_grid'] = di_dists_expon['NumericalIntegrator_loop'].copy()
+
+# which f_theta's will work with the different methods?
+di_f_theta = {
+    'MonteCarloIntegrator': {'works': [f_theta_mean, f_theta_coef,],
+                             'fails': [f_theta_identity, f_theta_tuple,]}, 
+    'NumericalIntegrator_loop': {'works': [f_theta_identity, f_theta_mean, f_theta_coef,],
+                                 'fails': [f_theta_tuple, ]},
+    'NumericalIntegrator_grid': {'works': [f_theta_identity,],
+                                 'fails': [f_theta_tuple, f_theta_coef, f_theta_mean, ]},
+}
+

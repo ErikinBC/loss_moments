@@ -8,13 +8,16 @@ python3 -m _rmd.extra_loss_moments.loss
 import numpy as np
 from inspect import signature
 from typing import Callable, Union
-from scipy.stats._multivariate import multivariate_normal_frozen
-from scipy.stats._distn_infrastructure import rv_continuous_frozen, rv_discrete_frozen
+from scipy.stats._multivariate import multivariate_normal_frozen, invwishart_frozen, multinomial_frozen, multi_rv_frozen, dirichlet_frozen, ortho_group_frozen, wishart_frozen, multivariate_t_frozen
+from scipy.stats._distn_infrastructure import rv_continuous_frozen, rv_discrete_frozen, rv_frozen
 # Internal modules
-from .utils import dist_Ycond_BVN, is_int, find_mandatory_kwargs
+from .utils import is_int, find_mandatory_kwargs
 
 # Define all distributions that quality for valid BVNs
-accepted_dists = (multivariate_normal_frozen, rv_continuous_frozen, rv_discrete_frozen, dist_Ycond_BVN)
+expected_dists = (multivariate_normal_frozen, invwishart_frozen, 
+                  multinomial_frozen, multi_rv_frozen, dirichlet_frozen, 
+                  ortho_group_frozen, wishart_frozen, multivariate_t_frozen,
+                  rv_continuous_frozen, rv_discrete_frozen, rv_frozen)
 
 
 class BaseIntegrator:
@@ -24,6 +27,7 @@ class BaseIntegrator:
                  dist_X_uncond: Union[rv_continuous_frozen, None] = None,
                  dist_Y_condX: Union[Callable, None] = None,
                  f_theta: Union[Callable, None] = None,
+                 has_expected_dist: bool = False
                  ) -> None:
         """
         Initialize the BaseIntegrator with given parameters.
@@ -40,12 +44,18 @@ class BaseIntegrator:
             Conditional distribution of Y given X (for conditional integration).
         f_theta : Callable, optional
             A function that maps x to the same dimension as y (usually a scalar), e.g. the predict method of a trained model. Specifically for ONLY loss(y, f_theta(x))
+        has_expected_dist : bool
+            Should we check if dist1 is of a scipy.stats._distn_infrastructure or scipy.stats._multivariate frozen type?
         """
         # Input checks
         self.has_joint = self._check_atleast_one_dist(dist_joint=dist_joint, 
                                                 dist_X_uncond=dist_X_uncond,
                                                 dist_Y_condX=dist_Y_condX )
-        self._input_checks(loss=loss, dist1=dist_joint or dist_X_uncond, dist2=dist_Y_condX, f_theta=f_theta)
+        self._input_checks(loss=loss, 
+                           dist1=dist_joint or dist_X_uncond, 
+                           dist2=dist_Y_condX, 
+                           f_theta=f_theta,
+                           has_expected_dist = has_expected_dist)
         # Assign attributes
         self.loss = loss
         self.dist_joint = dist_joint
@@ -94,14 +104,15 @@ class BaseIntegrator:
             assert (dist_X_uncond is None) and (dist_Y_condX is None), 'if a joint distribution IS provided, the either distributions need to be left as None'
         return has_joint
 
-    @staticmethod
-    def _input_checks(loss, 
+    def _input_checks(self,
+                      loss, 
                     dist1, 
                     num_samples = None, 
                     seed = None, 
                     dist2 = None, 
                     k_sd = None,
                     f_theta = None,
+                    has_expected_dist: bool = False,
                     ) -> None:
         """Makes sure that MCI/NumInt arguments are as expected, assertion checks only"""
         # Check the loss function
@@ -113,7 +124,18 @@ class BaseIntegrator:
             is_yx_callable = False
         assert is_yx_callable, 'expected to be able to call loss(y=..., x=...) with these named arguments'
         # Check first dist
-        assert isinstance(dist1, accepted_dists), f'the first distribution must be of type rv_continuous_frozen, not {type(dist1)}'
+        if has_expected_dist:
+            assert isinstance(dist1, expected_dists), f'the first distribution must be of type rv_continuous_frozen, not {type(dist1)}'
+        # Used in the _gen_bvn_bounds method
+        assert hasattr(dist1, 'mean')
+        if self.has_joint:
+            assert hasattr(dist1, 'cov')
+        else:
+            if not hasattr(dist1, 'std'):
+                assert hasattr(dist1, 'cov')
+            else:
+                assert isinstance(dist1.mean, Callable)
+                assert isinstance(dist1.std, Callable)
         # Check (possibly) second dist
         if dist2 is not None:
             assert isinstance(dist2, Callable), f'the second distribution must a callable function, not {type(dist2)}'

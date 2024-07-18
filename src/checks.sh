@@ -9,7 +9,7 @@ source loss_moments/bin/activate
 python3 -m src.loss_moments
 
 # Call the unit tests
-python3 -m pytest tests/ -s
+python3 -m pytest tests/ -s -W ignore
 
 
 echo "~~~ End of checks ~~~"
